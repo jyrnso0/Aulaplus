@@ -1,0 +1,33 @@
+---
+title: DS-01 · Flujo con regla y alternativa · Resolver disputa sin evidencia (CU-04c, BR-0020)
+---
+%%{init: {'theme':'neutral','themeVariables':{'fontSize':'15px','noteBkgColor':'#F3F4F6','noteTextColor':'#111111','noteBorderColor':'#9CA3AF'},'sequence':{'mirrorActors':false,'messageMargin':34,'width':190,'wrap':false}}}%%
+sequenceDiagram
+    actor S as Soporte
+    box rgb(219,234,254) Aplicación
+    participant A as DisputaApplicationService
+    participant U as UnitOfWork
+    end
+    box rgb(220,252,231) Dominio
+    participant D as Disputa
+    participant R as DisputaRepository
+    end
+
+    S->>A: 1 resolverDisputa(idDisputa, idResponsableSoporte, decision, evidenciaAdjunta)
+    A->>A: 2 autorizar rol Soporte y validar DTO
+    A->>U: 3 begin()
+    A->>R: 4 obtenerPorId(idDisputa)
+    R-->>A: 5 disputa y versión actual
+    A->>D: 6 resolver(decision, responsable)
+    alt sin evidencia disponible o decisión incompleta (BR-0020)
+        D-->>A: 7a EVIDENCIA_REQUERIDA
+        A->>U: 8a rollback()
+        A-->>S: 9a rechazo sin cambios, la disputa sigue escalada
+    else evidencia disponible y resolución válida
+        D->>D: 7b registrar Resolucion, estado = resuelta, crear DisputaResuelta
+        D-->>A: 8b resolución y evento
+        A->>R: 9b actualizar(disputa)
+        A->>U: 10b commit()
+        A-->>S: 11b DisputaDTO(estado resuelta)
+    end
+    Note over A,R: Después del commit, el evento DisputaResuelta se entrega a CU-11a (aplicarResolucion).<br/>La respuesta confirma la decisión, no una devolución bancaria. Si falla el commit, rollback y error.

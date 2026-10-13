@@ -1,0 +1,235 @@
+---
+title: AulaPlus - Diagrama de Clases
+config:
+  layout: elk
+  theme: default
+  themeVariables:
+    edgeLabelBackground: '#ffffff'
+  htmlLabels: false
+  class:
+    htmlLabels: false
+---
+classDiagram
+    direction TB
+
+    namespace Leyenda {
+        class Capa_Aplicacion:::app {
+            <<Aplicacion>>
+        }
+        class Capa_Dominio:::dom {
+            <<Dominio>>
+        }
+        class Capa_Infraestructura:::infra {
+            <<Infraestructura>>
+        }
+    }
+
+    namespace Aplicacion {
+        class ReservaApplicationService:::app {
+            <<ApplicationService>>
+            +reservarTutoria(cmd: ReservarTutoria) ReservaDTO
+            +confirmarPagoReserva(idReserva, datosPago) ReservaDTO
+            +liberarReservasVencidas() int
+        }
+        class TutorApplicationService:::app {
+            <<ApplicationService>>
+            +registrarDisponibilidad(idTutor, materia, franjaHoraria, modalidad) ConfirmacionDTO
+        }
+        class SesionApplicationService:::app {
+            <<ApplicationService>>
+            +iniciarSesion(sesionId: String)
+            +confirmarChecklist(sesionId: String, parte: Rol)
+            +finalizarSesion(sesionId: String)
+            +cancelarSesion(idSesion, idUsuarioQueCancela, motivo) ComprobanteCancelacionDTO
+        }
+        class DisputaApplicationService:::app {
+            <<ApplicationService>>
+            +reportarDisputa(cmd: ReportarDisputa) DisputaDTO
+            +resolverDisputa(idDisputa, idResponsableSoporte, decision, evidenciaAdjunta) DisputaDTO
+        }
+        class UnitOfWork:::app {
+            <<Interface>>
+            +begin()
+            +commit()
+            +rollback()
+        }
+        class PasarelaPagoExterna:::app {
+            <<Interface>>
+            +confirmarCobro(datosPago) ComprobantePago
+        }
+    }
+
+    namespace Dominio {
+        class Reserva:::dom {
+            <<AggregateRoot>>
+            -idReserva: String
+            -tutorId: String
+            -estudianteId: String
+            -horario: Horario
+            -importe: Dinero
+            -plazo: PlazoDePago
+            -estado: EstadoReserva
+            +confirmarPago(ahora: DateTime) bool
+            +liberarPorTimeout(ahora: DateTime) bool
+        }
+        class PlazoDePago:::dom {
+            <<ValueObject>>
+            -venceEn: DateTime
+            +estaVencido(ahora: DateTime) bool
+        }
+        class Sesion:::dom {
+            <<AggregateRoot>>
+            -idSesion: String
+            -reservaId: String
+            -tutorId: String
+            -horario: Horario
+            -estado: EstadoSesion
+            +iniciar(ahora: DateTime)
+            +confirmarChecklist(parte: Rol)
+            +finalizar(ahora: DateTime)
+            +cancelar(solicitante: Rol, ahora: DateTime) Cancelacion
+        }
+        class Cancelacion:::dom {
+            <<ValueObject>>
+            -solicitante: Rol
+            -anticipacion: Duracion
+        }
+        class Penalizacion:::dom {
+            <<ValueObject>>
+            -monto: Dinero
+            -cobradaA: Rol
+        }
+        class Tutor:::dom {
+            <<AggregateRoot>>
+            -idTutor: String
+            -estado: EstadoCuenta
+            +definirDisponibilidad(materia: String, franjas: List)
+            +registrarAusencia(sesionId: String) bool
+        }
+        class DisponibilidadMateria:::dom {
+            <<Entity>>
+            -materia: String
+        }
+        class Pago:::dom {
+            <<AggregateRoot>>
+            -idPago: String
+            -reservaId: String
+            -estado: EstadoPago
+            +confirmar(comprobante: String)
+            +aplicarCancelacion(cancelacion: Cancelacion)
+            +liquidar() DesglosePago
+        }
+        class Disputa:::dom {
+            <<AggregateRoot>>
+            -idDisputa: String
+            -sesionId: String
+            -estado: EstadoDisputa
+            +abrir(sesionId: String, parte: Rol, ahora: DateTime) Disputa
+            +adjuntarEvidencia(referencia: String)
+            +resolver(decision: String, responsable: String)
+        }
+        class EvidenciaAdjunta:::dom {
+            <<ValueObject>>
+            -referencia: String
+        }
+        class Horario:::dom {
+            <<ValueObject>>
+            -inicio: DateTime
+            -fin: DateTime
+            +traslapaCon(otro: Horario) bool
+        }
+        class Dinero:::dom {
+            <<ValueObject>>
+            -monto: Decimal
+            +por(porcentaje) Dinero
+        }
+        class ValidadorTraslapeHorario:::dom {
+            <<DomainService>>
+            +verificarTraslape(horario: Horario, sesiones: List~Sesion~)
+        }
+        class PoliticaDeReembolso:::dom {
+            <<DomainService>>
+            +calcularMonto(motivo: String, cancelacion: Cancelacion, importe: Dinero) Dinero
+        }
+        class ReservaRepository:::dom {
+            <<Interface>>
+            +obtenerPorId(id: String) Reserva
+            +guardar(reserva: Reserva)
+            +pendientesVencidas(ahora: DateTime) List~Reserva~
+        }
+        class SesionRepository:::dom {
+            <<Interface>>
+            +obtenerPorId(id: String) Sesion
+            +obtenerSesionesConfirmadasPorTutor(tutorId: String) List~Sesion~
+            +guardar(sesion: Sesion)
+        }
+        class TutorRepository:::dom {
+            <<Interface>>
+            +obtenerPorId(id: String) Tutor
+            +guardar(tutor: Tutor)
+        }
+        class PagoRepository:::dom {
+            <<Interface>>
+            +porReserva(reservaId: String) Pago
+            +guardar(pago: Pago)
+        }
+        class DisputaRepository:::dom {
+            <<Interface>>
+            +obtenerPorId(id: String) Disputa
+            +actualizar(disputa: Disputa)
+        }
+    }
+
+    namespace Infraestructura {
+        class SqlReservaRepository:::infra
+        class SqlSesionRepository:::infra
+        class SqlTutorRepository:::infra
+        class SqlPagoRepository:::infra
+        class SqlDisputaRepository:::infra
+        class SqlUnitOfWork:::infra
+        class AdaptadorPasarelaPago:::infra
+    }
+
+    %% Composicion (aggregates y sus objetos internos)
+    Reserva *-- PlazoDePago
+    Sesion *-- Cancelacion
+    Cancelacion *-- Penalizacion
+    Tutor *-- DisponibilidadMateria
+    Disputa *-- EvidenciaAdjunta
+
+    %% Referencias entre aggregates (por ID)
+    Reserva ..> Sesion
+    Sesion ..> Tutor
+    Pago ..> Reserva
+    Disputa ..> Sesion
+
+    %% Servicios de dominio
+    ValidadorTraslapeHorario ..> Sesion
+    PoliticaDeReembolso ..> Cancelacion
+
+    %% Application Services y sus colaboradores
+    ReservaApplicationService --> ReservaRepository
+    ReservaApplicationService --> PagoRepository
+    ReservaApplicationService --> PasarelaPagoExterna
+    ReservaApplicationService --> ValidadorTraslapeHorario
+    TutorApplicationService --> TutorRepository
+    SesionApplicationService --> SesionRepository
+    SesionApplicationService --> PoliticaDeReembolso
+    DisputaApplicationService --> DisputaRepository
+    DisputaApplicationService --> SesionRepository
+    ReservaApplicationService --> SesionRepository
+
+    %% Infraestructura implementa las interfaces
+    ReservaRepository <|.. SqlReservaRepository
+    SesionRepository <|.. SqlSesionRepository
+    TutorRepository <|.. SqlTutorRepository
+    PagoRepository <|.. SqlPagoRepository
+    DisputaRepository <|.. SqlDisputaRepository
+    UnitOfWork <|.. SqlUnitOfWork
+    PasarelaPagoExterna <|.. AdaptadorPasarelaPago
+
+    note for UnitOfWork "Todos los Application Services la usan: inicia la transaccion, hace commit y, ante un error, rollback"
+
+    classDef app fill:#DBEAFE,stroke:#2563EB,stroke-width:2px,color:black
+    classDef dom fill:#DCFCE7,stroke:#16A34A,stroke-width:2px,color:black
+    classDef infra fill:#FFEDD5,stroke:#EA580C,stroke-width:2px,color:black
